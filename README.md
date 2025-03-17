@@ -81,6 +81,11 @@ python main.py
      3. Click **OK** in the confirmation message.  
      4. The bounding box is now reassigned to the new label, and its relationships are automatically updated to reflect this change.
 
+> **Tip:** If you accidentally create an unwanted bounding box during **Create Bounding Box** mode, just assign any label to it (so it’s recognized by the system). Then:
+> 1. Click the **Create Bounding Box** button again to exit bounding box creation mode.
+> 2. Select the unwanted bounding box (it will turn blue).
+> 3. Right-click and choose **Remove bounding box**, then confirm to delete it.
+
 ## **Part 3: Create & Manage Attributes**
 
 > **Important:** Make sure the **Create Bounding Box** button is _inactive_ (white background) before proceeding.
