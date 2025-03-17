@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Annotation Tool UI
+SGDET-Annotate Tool
 @author: Minh Huy Pham <minhhuypham.working@gmail.com>
 
 This script implements an image annotation tool UI with the following components:
@@ -47,7 +47,7 @@ class AnnotationTool:
           :param master: The root Tkinter window.
           """
           self.master = master
-          self.master.title("Annotation Tool")
+          self.master.title("SGDET-Annotate")
 
           # Set initial window size and disable resizing
           self.master.geometry("1600x900")
