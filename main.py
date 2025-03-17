@@ -34,7 +34,7 @@ from typing import Optional, List, Tuple
 import json
 import os
 import numpy as np
-
+import h5py
 class AnnotationTool:
      """
      Main application class for the Annotation Tool.
@@ -483,6 +483,7 @@ class AnnotationTool:
           self.change_old_label = None
           self.attribute_add_mode = False
           self.relationship_mode = False
+          self.loaded_image = None
 
           # Update the views
           self.update_attribute_view()
@@ -1359,6 +1360,8 @@ class AnnotationTool:
           The output JSON file will have the format:
           {
                "image-name": <absolute path>,
+               "width": <image original width>
+               "height: <image original height>
                "attribute": <(N x 10) array of attributes (np.int32) as list>,
                "boxes_1024": <(N x 4) array of bounding boxes scaled to 1024 as list>,
                "boxes_512": <(N x 4) array of bounding boxes scaled to 512 as list>,
@@ -1406,10 +1409,10 @@ class AnnotationTool:
                factor_1024 = 1024 / max(orig_w, orig_h)
                factor_512 = 512 / max(orig_w, orig_h)
 
-               box_1024 = [int(center_x * factor_1024), int(center_y * factor_1024),
-                         int(box_width * factor_1024), int(box_height * factor_1024)]
-               box_512 = [int(center_x * factor_512), int(center_y * factor_512),
-                         int(box_width * factor_512), int(box_height * factor_512)]
+               box_1024 = np.array([int(center_x * factor_1024), int(center_y * factor_1024),
+                         int(box_width * factor_1024), int(box_height * factor_1024)], dtype=np.int32)
+               box_512 = np.array([int(center_x * factor_512), int(center_y * factor_512),
+                         int(box_width * factor_512), int(box_height * factor_512)], dtype=np.int32)
                boxes_1024.append(box_1024)
                boxes_512.append(box_512)
 
@@ -1427,8 +1430,14 @@ class AnnotationTool:
           relationships_list = []
           if self.relationships:
                for rel in self.relationships:
-                    source_bbox, _, target_bbox = rel
-                    relationships_list.append([source_bbox['label'], target_bbox['label']])
+                    source_bbox, rel_str, target_bbox = rel
+                    try:
+                         src_index = self.confirmed_bboxes.index(source_bbox)
+                         tgt_index = self.confirmed_bboxes.index(target_bbox)
+                    except ValueError:
+                         # If one of the bboxes is not found (should not happen normally), skip this relationship.
+                         continue
+                    relationships_list.append(np.array([src_index, tgt_index], dtype=np.int32))
           else:
                relationships_list = []
 
@@ -1443,6 +1452,8 @@ class AnnotationTool:
           # Construct output data dictionary.
           output_data = {
                "image-name": os.path.abspath(self.image_path) if hasattr(self, "image_path") else "",
+               "width": orig_w,
+               "height": orig_h,
                "attribute": attributes_array.tolist(),
                "boxes_1024": boxes_1024_array.tolist(),
                "boxes_512": boxes_512_array.tolist(),
@@ -1457,11 +1468,31 @@ class AnnotationTool:
           else:
                base_name = "annotation_output"
 
-          output_file = os.path.join(self.output_dir, f"{base_name}.json")
+          output_file_json = os.path.join(self.output_dir, f"{base_name}.json")
+          output_file_h5 = os.path.join(self.output_dir, f"{base_name}.h5")
           try:
-               with open(output_file, "w", encoding="utf-8") as f:
+               # Save data in json file:
+               with open(output_file_json, "w", encoding="utf-8") as f:
                     json.dump(output_data, f, indent=4)
-               messagebox.showinfo("Save Data", f"Annotation data saved to {output_file}")
+
+               # Save data in h5 file:
+               with h5py.File(output_file_h5, "w") as hf:
+                    # Store image name as a string attribute
+                    hf.attrs["image-name"] = os.path.abspath(self.image_path) if hasattr(self, "image_path") else ""
+
+                    # Store width/height as numeric attributes
+                    hf.attrs["width"] = orig_w
+                    hf.attrs["height"] = orig_h
+
+                    # Create datasets for the numeric arrays
+                    hf.create_dataset("attribute", data=attributes_array)
+                    hf.create_dataset("boxes_1024", data=boxes_1024_array)
+                    hf.create_dataset("boxes_512", data=boxes_512_array)
+                    hf.create_dataset("labels", data=labels_array)
+                    hf.create_dataset("relationships", data=relationships_array)
+                    hf.create_dataset("predicates", data=predicates_array)
+
+               messagebox.showinfo("Save Data", f"Annotation data saved to {output_file_json}")
           except Exception as e:
                messagebox.showerror("Save Data Error", str(e))
 
