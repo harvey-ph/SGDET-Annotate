@@ -1,0 +1,7 @@
+bottle
+remote
+sponge
+cube
+book
+box
+human
