@@ -121,6 +121,7 @@ class AnnotationTool:
 
           # For Opening Context menu to interact with created bounding box:
           self.canvas.bind("<Button-3>", self.show_context_menu)
+          self.canvas.bind("<Button-2>", self.show_context_menu)
 
           # ---------------------------
           # Right Panel (Import Lists)
@@ -258,6 +259,7 @@ class AnnotationTool:
           
           # Bind right‐click on the attribute view for removing attributes
           self.attribute_view_listbox.bind("<Button-3>", self.show_attribute_context_menu)
+          self.attribute_view_listbox.bind("<Button-2>", self.show_attribute_context_menu)
 
           # Components 13: Relationship view
           self.relationship_view_frame = tk.Frame(self.bottom_panel, bd=1, relief=tk.SUNKEN)
@@ -272,6 +274,7 @@ class AnnotationTool:
           
           # Bind right‐click on the relationship view for removing relationships
           self.relationship_view_listbox.bind("<Button-3>", self.show_relationship_context_menu)
+          self.relationship_view_listbox.bind("<Button-2>", self.show_relationship_context_menu)
 
           # Configure grid weights in bottom_panel so row 1 expands equally.
           self.bottom_panel.grid_columnconfigure(0, weight=1)
@@ -432,7 +435,7 @@ class AnnotationTool:
           self.canvas.coords(self.temp_rect, x1, y1, x2, y2)
 
           # Set the rectangle to a solid line initially.
-          self.canvas.itemconfig(self.temp_rect, dash=(), outline="red", width=3)
+          self.canvas.itemconfig(self.temp_rect, dash="", outline="red", width=3)
 
           # Store the pending bounding box (awaiting label assignment).
           self.pending_bbox = {
@@ -576,7 +579,7 @@ class AnnotationTool:
           
           # Toggle flash state: if True, set to solid; if False, set to dashed.
           if self.pending_bbox['flash_state']:
-               self.canvas.itemconfig(rect_id, dash=())
+               self.canvas.itemconfig(rect_id, dash="")
           else:
                self.canvas.itemconfig(rect_id, dash=(5, 2))
           
@@ -661,7 +664,7 @@ class AnnotationTool:
 
                # Update the bounding box (set solid outline and add a text tag).
                rect_id = pending['rect_id']
-               self.canvas.itemconfig(rect_id, dash=(), outline="red", width=3)
+               self.canvas.itemconfig(rect_id, dash="", outline="red", width=3)
 
                # Add a label tag above the bounding box.
                x1, y1, x2, y2 = pending['coords']
