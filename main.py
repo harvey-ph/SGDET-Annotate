@@ -1174,6 +1174,10 @@ class AnnotationTool:
                self.canvas.delete(self.selected_bbox['rect_id'])
                if 'text_id' in self.selected_bbox:
                     self.canvas.delete(self.selected_bbox['text_id'])
+                    if 'text_bg_id' in self.selected_bbox:
+                         self.canvas.delete(self.selected_bbox['text_bg_id'])
+                         del self.selected_bbox['text_bg_id']
+
 
                # Remove from confirmed bounding boxes list and clear selection.
                self.confirmed_bboxes.remove(self.selected_bbox)
