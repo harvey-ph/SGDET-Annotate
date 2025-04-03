@@ -1205,18 +1205,75 @@ class AnnotationTool:
           self.pending_relationship = self.rel_listbox.get(selection[0])
           messagebox.showinfo("Add Relationship", 
                               f"Selected relationship: {self.pending_relationship}. Now click on the target bounding box (different from source).")
-
+          # Re-enable the Labeled view so user can select target object.
+          self.labeled_listbox.config(state="normal")
+          
      def on_labeled_select(self, event):
           """
           Handler for selecting an item in Components 3 (Labeled view).
           This toggles the selection of the corresponding bounding box.
-          """
 
+          If relationship_mode is active and a pending relationship exists,
+          then this selection is treated as the target object for the relationship.
+          Otherwise, it toggles the selection of the corresponding bounding box.
+          """
+          
+          # --- If in relationship mode, use selection as target object ---
+          if self.relationship_mode and self.pending_relationship:
+               selection = self.labeled_listbox.curselection()
+               if not selection:
+                    return
+
+               # Get the text of the selected entry.
+               idx = selection[0]
+               entry = self.labeled_listbox.get(idx)
+
+               # Find the matching confirmed bbox.
+               target_bbox = None
+               for bb in self.confirmed_bboxes:
+                    if f"{bb['label_str']}:{bb['id']}" == entry:
+                         target_bbox = bb
+                         break
+               if target_bbox is None:
+                    return
+               
+               if target_bbox == self.source_bbox:
+                    messagebox.showwarning("Add Relationship", "Target bbox must be different from the source.")
+                    return
+               # Check if the relationship already exists.
+               for rel in self.relationships:
+                    if (rel[0] == self.source_bbox and rel[1] == self.pending_relationship and rel[2] == target_bbox):
+                         messagebox.showwarning("Add Relationship", "This relationship has already been created.")
+                         self.relationship_mode = False
+                         self.source_bbox = None
+                         self.pending_relationship = ""
+                         self.labeled_listbox.config(state="normal")
+                         return
+               # Confirm relationship creation.
+               source_str = f"{self.source_bbox['label_str']}:{self.source_bbox['id']}"
+               target_str = f"{target_bbox['label_str']}:{target_bbox['id']}"
+               predicate = self.relationships_mapping.get(self.pending_relationship, 0)
+               confirm = messagebox.askokcancel("Confirm Relationship",
+                              f"Create relationship: {source_str} --- {self.pending_relationship} --- {target_str}?")
+               if confirm:
+                    self.relationships.append((self.source_bbox, self.pending_relationship, target_bbox))
+                    if not hasattr(self, "predicates"):
+                         self.predicates = []
+                    self.predicates.append(predicate)
+                    self.update_relationship_view()
+               # Reset relationship mode and re-enable normal selection.
+               self.relationship_mode = False
+               self.source_bbox = None
+               self.pending_relationship = ""
+               self.labeled_listbox.config(state="normal")
+               return
+
+          # --- Otherwise, proceed with normal bbox selection ---
+          # If the clicked bbox is already selected, deselect it.
           if self.create_bbox_active or self.attribute_add_mode or self.relationship_mode:
                return
-          
-          selection = self.labeled_listbox.curselection()
 
+          selection = self.labeled_listbox.curselection()
           if not selection:
                return
           
@@ -1230,11 +1287,9 @@ class AnnotationTool:
                if f"{bb['label_str']}:{bb['id']}" == entry:
                     found_bbox = bb
                     break
-
           if found_bbox is None:
                return
-
-          # If the clicked bbox is already selected, deselect it.
+          
           if self.selected_bbox == found_bbox:
                self._deselect_bbox(found_bbox)
                self.labeled_listbox.selection_clear(0, tk.END)
