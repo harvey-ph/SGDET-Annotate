@@ -59,16 +59,16 @@ python main.py
    - Left-click and hold the mouse at your desired starting point on the image.
    - Drag the mouse to create a red rectangle around the object.
    - Release the mouse button once you’ve enclosed the object.
-   - The newly created bounding box will flash, indicating it’s ready for a label.
+   - You’ll see a **dashed bounding box** with **blue dots** (anchor points) at the edges and corners. You can click and drag these points to **resize** or **realign** the bounding box before labeling it.  
    - Note that the bounding box will only be limited to the border of the image and you cannot click outside the image to start creating a new bounding box.
 
-4. **Label the Bounding Box**  
+5. **Label the Bounding Box**  
    - Locate the appropriate label in the **Label List** you imported earlier and double-click on it.
    - Click **OK** on the confirmation panel that appears.
    - The bounding box is now successfully created and will be displayed as something like `bed:1`, where `1` is an internal ID distinguishing it from other bounding boxes of the same label.  
    > **Note:** This numeric suffix (e.g., `:1`) is only for internal reference and will _not_ be saved to the final dataset.
 
-5. **Editing or Removing a Bounding Box**  
+6. **Editing or Removing a Bounding Box**  
    - **Exit Bounding Box Creation Mode:**  
      Click the **Create Bounding Box** button again (it will return to its original white color).
    - **Delete an Unsatisfactory Box:**  
