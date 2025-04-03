@@ -434,17 +434,25 @@ class AnnotationTool:
           y1, y2 = sorted((y1, y2))
           self.canvas.coords(self.temp_rect, x1, y1, x2, y2)
 
-          # Set the rectangle to a solid line initially.
-          self.canvas.itemconfig(self.temp_rect, dash="", outline="red", width=3)
+          # Set the newly created bounding box to a dashed style:
+          self.canvas.itemconfig(self.temp_rect, dash=(5, 2), outline="red", width=3)
 
           # Store the pending bounding box (awaiting label assignment).
           self.pending_bbox = {
                'rect_id': self.temp_rect,
-               'coords': (x1, y1, x2, y2),
-               'flash_state': True  # True means next flash will show dashed
+               'coords': (x1, y1, x2, y2)
           }
+          
+          # self.pending_bbox = {
+          #      'rect_id': self.temp_rect,
+          #      'coords': (x1, y1, x2, y2),
+          #      'flash_state': True  # True means next flash will show dashed
+          # }
           # Start flashing.
-          self.flash_pending_bbox()
+          # self.flash_pending_bbox()
+
+          # Create draggable handles at the corners and midpoints.
+          self.create_handles(self.pending_bbox)
 
           # Reset temporary rectangle (it is now managed by pending_bbox).
           self.temp_rect = None
@@ -572,7 +580,7 @@ class AnnotationTool:
           Toggle the flash state (dashed/solid) of the pending bounding box.
           Continues until a label is confirmed.
           """
-          if not self.pending_bbox:
+          if not self.pending_bbox or "flash_state" not in self.pending_bbox:
                return
 
           rect_id = self.pending_bbox['rect_id']
@@ -665,6 +673,12 @@ class AnnotationTool:
                # Update the bounding box (set solid outline and add a text tag).
                rect_id = pending['rect_id']
                self.canvas.itemconfig(rect_id, dash="", outline="red", width=3)
+
+               # If handles exist, remove them
+               if 'handles' in pending:
+                    for handle in pending['handles'].values():
+                         self.canvas.delete(handle)
+                    del pending['handles']
 
                # Add a label tag above the bounding box.
                x1, y1, x2, y2 = pending['coords']
@@ -932,6 +946,125 @@ class AnnotationTool:
 
           except Exception as e:
                messagebox.showerror("Import Relationship List Error", str(e))
+
+
+     #---------------------------------------
+     # Creating draggable bounding box
+     # ---------------------------------------
+
+     def create_handles(self, bbox):
+          """Create draggable handle ovals at the corners and midpoints of the box."""
+          x1, y1, x2, y2 = bbox['coords']
+          r = 5  # radius of the handle circles
+          handles = {}
+          # Corners
+          handles['tl'] = self.canvas.create_oval(x1 - r, y1 - r, x1 + r, y1 + r, fill="blue", outline="")
+          handles['tr'] = self.canvas.create_oval(x2 - r, y1 - r, x2 + r, y1 + r, fill="blue", outline="")
+          handles['bl'] = self.canvas.create_oval(x1 - r, y2 - r, x1 + r, y2 + r, fill="blue", outline="")
+          handles['br'] = self.canvas.create_oval(x2 - r, y2 - r, x2 + r, y2 + r, fill="blue", outline="")
+          # Midpoints
+          handles['tm'] = self.canvas.create_oval((x1+x2)/2 - r, y1 - r, (x1+x2)/2 + r, y1 + r, fill="blue", outline="")
+          handles['bm'] = self.canvas.create_oval((x1+x2)/2 - r, y2 - r, (x1+x2)/2 + r, y2 + r, fill="blue", outline="")
+          handles['ml'] = self.canvas.create_oval(x1 - r, (y1+y2)/2 - r, x1 + r, (y1+y2)/2 + r, fill="blue", outline="")
+          handles['mr'] = self.canvas.create_oval(x2 - r, (y1+y2)/2 - r, x2 + r, (y1+y2)/2 + r, fill="blue", outline="")
+          bbox['handles'] = handles
+
+          # For each handle, add a tag with the handle type and bind events.
+          for key, hid in handles.items():
+               # Add a tag with the key (e.g. "tl", "tr", etc.)
+               self.canvas.itemconfig(hid, tags=("handle", key))
+               # Bind mouse events to the handle
+               self.canvas.tag_bind(hid, "<Button-1>", self.on_handle_press)
+               self.canvas.tag_bind(hid, "<B1-Motion>", self.on_handle_drag)
+               self.canvas.tag_bind(hid, "<ButtonRelease-1>", self.on_handle_release)
+
+     def update_handles(self, bbox):
+          """Reposition the handles based on the new bbox coordinates."""
+          if 'handles' not in bbox:
+               return
+          x1, y1, x2, y2 = bbox['coords']
+          r = 5
+          new_coords = {
+               "tl": (x1 - r, y1 - r, x1 + r, y1 + r),
+               "tr": (x2 - r, y1 - r, x2 + r, y1 + r),
+               "bl": (x1 - r, y2 - r, x1 + r, y2 + r),
+               "br": (x2 - r, y2 - r, x2 + r, y2 + r),
+               "tm": ((x1+x2)/2 - r, y1 - r, (x1+x2)/2 + r, y1 + r),
+               "bm": ((x1+x2)/2 - r, y2 - r, (x1+x2)/2 + r, y2 + r),
+               "ml": (x1 - r, (y1+y2)/2 - r, x1 + r, (y1+y2)/2 + r),
+               "mr": (x2 - r, (y1+y2)/2 - r, x2 + r, (y1+y2)/2 + r)
+          }
+          for key, hid in bbox['handles'].items():
+               self.canvas.coords(hid, *new_coords[key])
+
+     def on_handle_press(self, event):
+          """Record which handle is being pressed and its starting position."""
+          handle_id = self.canvas.find_withtag("current")[0]
+          self.dragging_handle = handle_id
+          self.last_handle_x = event.x
+          self.last_handle_y = event.y
+
+     def on_handle_drag(self, event):
+          """Handle dragging of a resize handle to adjust the pending bbox."""
+          if not hasattr(self, "dragging_handle"):
+               return
+          dx = event.x - self.last_handle_x
+          dy = event.y - self.last_handle_y
+          self.last_handle_x = event.x
+          self.last_handle_y = event.y
+          # Get which handle (key) is being dragged.
+          tags = self.canvas.gettags(self.dragging_handle)
+          if len(tags) < 2:
+               return
+          handle_key = tags[1]  # e.g., "tl", "tr", etc.
+          x1, y1, x2, y2 = self.pending_bbox['coords']
+          # Update coordinates based on which handle is dragged.
+          if handle_key == "tl":
+               x1 += dx
+               y1 += dy
+          elif handle_key == "tr":
+               x2 += dx
+               y1 += dy
+          elif handle_key == "bl":
+               x1 += dx
+               y2 += dy
+          elif handle_key == "br":
+               x2 += dx
+               y2 += dy
+          elif handle_key == "tm":
+               y1 += dy
+          elif handle_key == "bm":
+               y2 += dy
+          elif handle_key == "ml":
+               x1 += dx
+          elif handle_key == "mr":
+               x2 += dx
+          # Enforce a minimum size (optional)
+          min_size = 10
+          if x2 - x1 < min_size:
+               if handle_key in ["tl", "ml", "bl"]:
+                    x1 = x2 - min_size
+               else:
+                    x2 = x1 + min_size
+          if y2 - y1 < min_size:
+               if handle_key in ["tl", "tm", "tr"]:
+                    y1 = y2 - min_size
+               else:
+                    y2 = y1 + min_size
+          # Update the pending bbox coordinates.
+          self.pending_bbox['coords'] = (x1, y1, x2, y2)
+          # Update the rectangle.
+          self.canvas.coords(self.pending_bbox['rect_id'], x1, y1, x2, y2)
+          # Update handle positions.
+          self.update_handles(self.pending_bbox)
+
+     def on_handle_release(self, event):
+          """Clear dragging info when the user releases a handle."""
+          if hasattr(self, "dragging_handle"):
+               del self.dragging_handle
+               del self.last_handle_x
+               del self.last_handle_y
+
 
      #---------------------------------------
      # Interactions with created bounding boxes
