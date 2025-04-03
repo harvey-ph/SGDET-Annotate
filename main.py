@@ -1005,7 +1005,7 @@ class AnnotationTool:
           self.last_handle_y = event.y
 
      def on_handle_drag(self, event):
-          """Handle dragging of a resize handle to adjust the pending bbox."""
+          """Handle dragging of a resize handle to adjust the pending bbox, clamped to the image area."""
           if not hasattr(self, "dragging_handle"):
                return
           dx = event.x - self.last_handle_x
@@ -1039,7 +1039,8 @@ class AnnotationTool:
                x1 += dx
           elif handle_key == "mr":
                x2 += dx
-          # Enforce a minimum size (optional)
+
+          # Enforce a minimum size.
           min_size = 10
           if x2 - x1 < min_size:
                if handle_key in ["tl", "ml", "bl"]:
@@ -1051,12 +1052,23 @@ class AnnotationTool:
                     y1 = y2 - min_size
                else:
                     y2 = y1 + min_size
-          # Update the pending bbox coordinates.
+
+          # Clamp the new coordinates to remain within the image area.
+          if self.image_area:
+               img_x, img_y, img_w, img_h = self.image_area
+               x_min, y_min = img_x, img_y
+               x_max, y_max = img_x + img_w, img_y + img_h
+               x1 = max(x1, x_min)
+               y1 = max(y1, y_min)
+               x2 = min(x2, x_max)
+               y2 = min(y2, y_max)
+
+          # Update the pending bbox coordinates and redraw the rectangle.
           self.pending_bbox['coords'] = (x1, y1, x2, y2)
-          # Update the rectangle.
           self.canvas.coords(self.pending_bbox['rect_id'], x1, y1, x2, y2)
-          # Update handle positions.
+          # Update the handle positions based on the new bbox coordinates.
           self.update_handles(self.pending_bbox)
+
 
      def on_handle_release(self, event):
           """Clear dragging info when the user releases a handle."""
