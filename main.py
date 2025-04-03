@@ -29,7 +29,7 @@ This script implements an image annotation tool UI with the following components
 # Dependencies:
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageOps
 from typing import Optional, List, Tuple
 import json
 import os
@@ -506,6 +506,7 @@ class AnnotationTool:
 
           try:
                pil_image = Image.open(file_path)
+               pil_image = ImageOps.exif_transpose(pil_image)
                self.loaded_image = pil_image
 
                # Ensure layout is updated so can get canvas size.
