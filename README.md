@@ -150,7 +150,7 @@ python main.py
   > **Important:** Ensure you’ve fully completed annotation for the **current image** before switching to a new one. Once a new image is opened, any unsaved data from the previous image will be lost.
 
 - **Editing Previously Annotated Images**  
-  - Reopening a previously saved image will not currently display its existing bounding boxes, labels, attributes, or relationships (this feature is planned for a future release), even if you save it, you will have to do everything for the photo again from scratch.
+  - Reopening a previously saved image will ~~not~~ now currently display its existing bounding boxes, labels, attributes, or relationships ~~(this feature is planned for a future release)~~ (this feature is now updated), ~~even if you save it, you will have to do everything for the photo again from scratch~~.
   - Therefore, double-check your annotations and make all necessary edits before moving on to another image.
 
 - **Data Format**
