@@ -123,6 +123,9 @@ class AnnotationTool:
           self.canvas.bind("<Button-3>", self.show_context_menu)
           self.canvas.bind("<Button-2>", self.show_context_menu)
 
+          # Bind the window close event to our on_closing handler.
+          self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
+
           # ---------------------------
           # Right Panel (Import Lists)
           # Contains Components 2-7.
@@ -292,9 +295,9 @@ class AnnotationTool:
           # Auto load the labels, relationships or attributes if imported before:
           self._auto_load_imported_files()
 
-     # ---------------------------------------
+     #---------------------------------------
      # Mouse and Canvas Event Handlers
-     # ---------------------------------------
+     #---------------------------------------
 
      def on_canvas_click(self, event):
           """
@@ -457,9 +460,9 @@ class AnnotationTool:
           # Reset temporary rectangle (it is now managed by pending_bbox).
           self.temp_rect = None
 
-     # ---------------------------------------
+     #---------------------------------------
      # Image Loading and Scaling (Component 1)
-     # ---------------------------------------
+     #---------------------------------------
      def open_image(self):
           """
           Open an image file, scale and center it in the canvas according to the rules:
@@ -472,6 +475,25 @@ class AnnotationTool:
           )
           if not file_path:
                return
+
+          # Get the image file path
+          self.image_path = file_path
+          base_name = os.path.splitext(os.path.basename(file_path))[0]
+          annotation_file = os.path.join(self.output_dir, f"{base_name}.json")
+
+          # Check if an annotation file exists.
+          ann_data = None
+          if os.path.exists(annotation_file):
+               load_ann = messagebox.askyesno(
+                    "Load Annotation",
+                    f"Annotation data for {base_name} exists in the output folder.\nDo you want to load it?"
+               )
+               if load_ann:
+                    try:
+                         with open(annotation_file, "r", encoding="utf-8") as f:
+                              ann_data = json.load(f)
+                    except Exception as e:
+                         messagebox.showerror("Load Annotation Error", str(e))
 
           # Clear previous image's temporary and persistent data
           self.canvas.delete("all")
@@ -501,8 +523,6 @@ class AnnotationTool:
           self.update_labeled_view()
           self.update_relationship_view()
 
-          # Get the image file path
-          self.image_path = file_path
 
           try:
                pil_image = Image.open(file_path)
@@ -536,12 +556,124 @@ class AnnotationTool:
                self.image_area = (x_offset, y_offset, new_w, new_h)
                self.canvas.create_image(x_offset, y_offset, anchor=tk.NW, image=self.image_tk)
 
-               # Reset confirmed bounding boxes and selections.
-               self.confirmed_bboxes.clear()
-               self.update_labeled_view()
-               self.selected_bbox = None
+               # After loading the image, if annotation data was loaded, then load it.
+               if ann_data:
+                    self.load_annotation_data(ann_data)
+               else:
+                    # Otherwise, clear confirmed_bboxes (if any) and update views.
+                    self.confirmed_bboxes.clear()
+                    self.update_labeled_view()
+                    self.selected_bbox = None
+
           except Exception as e:
                messagebox.showerror("Open Image Error", str(e))
+
+     def load_annotation_data(self, ann_data):
+          """
+          Given a dictionary of annotation data (loaded from JSON),
+          reconstruct the confirmed bounding boxes and update the canvas and listviews.
+          Expected keys: "boxes_canvas", "labels", "attribute", "relationships", "predicates"
+          """
+          # Clear any current annotations
+          self.confirmed_bboxes.clear()
+
+          # Load saved data:
+          boxes_canvas = ann_data.get("boxes_canvas", [])
+          labels_arr = ann_data.get("labels", [])
+          attributes_arr = ann_data.get("attribute", [])
+          relationships_arr = ann_data.get("relationships", [])
+          predicates_arr = ann_data.get("predicates", [])
+
+          
+          # Reconstruct bounding boxes and associated text/attributes.
+          for i, coords in enumerate(boxes_canvas):
+               
+               # Draw the rectangle on the canvas
+               rect_id = self.canvas.create_rectangle(*coords, outline="red", width=3)
+               text_x = (coords[0] + coords[2]) / 2
+               text_y = coords[1] - 10  # 10 pixels above
+               
+               # Look up the string label from labels_mapping (assuming unique mapping)
+               label_num = labels_arr[i]
+               label_str = None
+               for key, value in self.labels_mapping.items():
+                    if value == label_num:
+                         label_str = key
+                         break
+               if label_str is None:
+                    label_str = "Unknown"
+               text_id = self.canvas.create_text(text_x, text_y, text=f"{label_str}:{label_num}",
+                                                  fill="yellow", font=("Arial", 12, "bold"))
+               
+               # Convert the saved attributes (numeric IDs) to attribute texts,
+               # Invert the attributes_mapping to map id -> text
+               id_to_attr = {v: k for k, v in self.attributes_mapping.items()}
+
+               # filtering out any 0 (unassigned) values.
+               if i < len(attributes_arr):
+                    attr_ids = attributes_arr[i]
+                    # Only include non-zero values
+                    assigned_attrs = [id_to_attr[a] for a in attr_ids if a != 0 and a in id_to_attr]
+               else:
+                    assigned_attrs = []
+
+               bbox = {
+                    "rect_id": rect_id,
+                    "coords": coords,
+                    "label": label_num,
+                    "id": label_num,
+                    "label_str": label_str,
+                    "text_id": text_id,
+                    "selected": False,
+                    "attributes": assigned_attrs
+               }
+               self.confirmed_bboxes.append(bbox)
+               # Optionally, create draggable handles if needed:
+               # self.create_handles(bbox)
+
+          # Rebuild relationships using the saved relationship indices.
+          # Assume that relationships_arr is a list of [src_index, tgt_index] pairs and
+          # predicates_arr is a list of predicate ids corresponding to each relationship.
+          self.relationships.clear()
+          self.predicates = []
+          for idx, rel_pair in enumerate(relationships_arr):
+               src_idx, tgt_idx = rel_pair  # indices into confirmed_bboxes
+               if src_idx < len(self.confirmed_bboxes) and tgt_idx < len(self.confirmed_bboxes):
+                    src_bbox = self.confirmed_bboxes[src_idx]
+                    tgt_bbox = self.confirmed_bboxes[tgt_idx]
+                    # Get the relationship string from relationships_mapping
+                    predicate_id = predicates_arr[idx]
+                    rel_str = None
+                    for key, value in self.relationships_mapping.items():
+                         if value == predicate_id:
+                              rel_str = key
+                              break
+                    if rel_str is None:
+                         rel_str = "Unknown"
+                    self.relationships.append((src_bbox, rel_str, tgt_bbox))
+                    self.predicates.append(predicate_id)
+
+          # Finally, update the list views.
+          self.reassign_bbox_ids()
+          self.update_labeled_view()
+          self.update_attribute_view()
+          self.update_relationship_view()
+
+     def reassign_bbox_ids(self):
+          """
+          Reassign instance ids for all confirmed bounding boxes so that
+          each unique label starts at 1 and increments for subsequent boxes.
+          Also updates the text label displayed on the canvas.
+          """
+          counts = {}  # Dictionary to keep track of counts for each label
+          for bbox in self.confirmed_bboxes:
+               label_text = bbox['label_str']
+               counts[label_text] = counts.get(label_text, 0) + 1
+               bbox['id'] = counts[label_text]
+               new_text = f"{label_text}:{counts[label_text]}"
+               # Update the canvas text
+               self.canvas.itemconfig(bbox['text_id'], text=new_text)
+
 
      def toggle_create_bbox(self):
           """
@@ -572,9 +704,9 @@ class AnnotationTool:
                # Re-enable the label view when create bbox mode is turned off.
                self.labeled_listbox.bind("<<ListboxSelect>>", self.on_labeled_select)
 
-     # ---------------------------------------
+     #---------------------------------------
      # Label Assignment and Confirmation
-     # ---------------------------------------
+     #---------------------------------------
 
      def flash_pending_bbox(self):
           """
@@ -707,9 +839,9 @@ class AnnotationTool:
                self.update_labeled_view()
                self.handling_new_bbox = False
 
-     # ---------------------------------------
+     #---------------------------------------
      # Selection/Deselection of Confirmed Bounding Boxes
-     # ---------------------------------------
+     #---------------------------------------
 
      def _get_confirmed_bbox_at(self, x, y):
           
@@ -782,7 +914,7 @@ class AnnotationTool:
                     bg_rect = self.canvas.create_rectangle(
                          text_coords[0] - pad, text_coords[1] - pad,
                          text_coords[2] + pad, text_coords[3] + pad,
-                         fill="black",  # choose a contrasting background color (or any color you prefer)
+                         fill="black",  # choose a contrasting background color
                          outline=""
                     )
                     
@@ -824,7 +956,7 @@ class AnnotationTool:
      
      #---------------------------------------
      # Import List Functions for components 3-5-7
-     # ---------------------------------------
+     #---------------------------------------
 
      def import_label_list(self):
           """
@@ -951,7 +1083,7 @@ class AnnotationTool:
 
      #---------------------------------------
      # Creating draggable bounding box
-     # ---------------------------------------
+     #---------------------------------------
 
      def create_handles(self, bbox):
           """Create draggable handle ovals at the corners and midpoints of the box."""
@@ -1081,7 +1213,7 @@ class AnnotationTool:
 
      #---------------------------------------
      # Interactions with created bounding boxes
-     # ---------------------------------------
+     #---------------------------------------
 
      def add_attribute(self) -> None:
           """
@@ -1207,7 +1339,7 @@ class AnnotationTool:
                               f"Selected relationship: {self.pending_relationship}. Now click on the target bounding box (different from source).")
           # Re-enable the Labeled view so user can select target object.
           self.labeled_listbox.config(state="normal")
-          
+
      def on_labeled_select(self, event):
           """
           Handler for selecting an item in Components 3 (Labeled view).
@@ -1379,6 +1511,12 @@ class AnnotationTool:
                          self.canvas.delete(self.selected_bbox['text_bg_id'])
                          del self.selected_bbox['text_bg_id']
 
+               # Delete any draggable handles (blue dots) if they exist
+               if 'handles' in self.selected_bbox:
+                    for handle in self.selected_bbox['handles'].values():
+                         self.canvas.delete(handle)
+                    del self.selected_bbox['handles']
+
 
                # Remove from confirmed bounding boxes list and clear selection.
                self.confirmed_bboxes.remove(self.selected_bbox)
@@ -1440,7 +1578,7 @@ class AnnotationTool:
 
      #---------------------------------------
      # Handling context menus (Total 3)
-     # ---------------------------------------
+     #---------------------------------------
      def show_context_menu(self, event: tk.Event) -> None:
           """
           Display a context menu at the current cursor position when a
@@ -1490,7 +1628,7 @@ class AnnotationTool:
                menu.add_command(label="Remove Attribute", command=self.remove_attribute)
                menu.post(event.x_root, event.y_root)
           except Exception as e:
-               # You can log the exception if needed.
+               # Log the exception if needed.
                pass
 
      def show_relationship_context_menu(self, event: tk.Event) -> None:
@@ -1515,9 +1653,9 @@ class AnnotationTool:
                # (Optional) log or print(e)
                pass
 
-     # ---------------------------------------
+     #---------------------------------------
      # Update view components (11-labels, 12-attributes, 13-relationships)
-     # ---------------------------------------
+     #---------------------------------------
      def update_labeled_view(self):
           """
           Update Components 11 (Labeled view) with confirmed bounding boxes.
@@ -1558,9 +1696,9 @@ class AnnotationTool:
                entry = f"{source_bbox['label_str']}:{source_bbox['id']} --- {rel_str} --- {target_bbox['label_str']}:{target_bbox['id']}"
                self.relationship_view_listbox.insert(tk.END, entry)
 
-     # ---------------------------------------
+     #---------------------------------------
      # Handling saving data:
-     # ---------------------------------------
+     #---------------------------------------
      def save_data(self) -> None:
           """
           Save annotation data to disk in JSON format.
@@ -1596,6 +1734,7 @@ class AnnotationTool:
           boxes_512 = []
           attributes_list = []
           labels_list = []
+          boxes_canvas = []
 
           for bbox in self.confirmed_bboxes:
                # Canvas coordinates for the bbox:
@@ -1634,6 +1773,9 @@ class AnnotationTool:
                # For label, already stored as numeric.
                labels_list.append(bbox['label'])
 
+               # For loading annotated data:
+               boxes_canvas.append(bbox['coords'])
+
           # For relationships:
           relationships_list = []
           if self.relationships:
@@ -1662,6 +1804,7 @@ class AnnotationTool:
                "image-name": os.path.abspath(self.image_path) if hasattr(self, "image_path") else "",
                "width": orig_w,
                "height": orig_h,
+               "boxes_canvas": boxes_canvas,  
                "attribute": attributes_array.tolist(),
                "boxes_1024": boxes_1024_array.tolist(),
                "boxes_512": boxes_512_array.tolist(),
@@ -1704,9 +1847,29 @@ class AnnotationTool:
           except Exception as e:
                messagebox.showerror("Save Data Error", str(e))
 
-     # ---------------------------------------
+     def on_closing(self):
+          """
+          When the user attempts to close the program, check if there is
+          annotated data. If so, warn the user and ask if they have saved their work.
+          If the user answers yes, exit; otherwise, do nothing.
+          """
+          # Consider that annotated data exists if there is at least one confirmed bbox.
+          if self.confirmed_bboxes:
+               answer = messagebox.askyesno(
+                    "Unsaved Annotation Data",
+                    "You have annotated data.\nHave you saved your annotations? (Yes to exit, No to continue working.)"
+               )
+               if answer:
+                    self.master.destroy()
+               else:
+                    # Do nothing: user can continue working.
+                    return
+          else:
+               self.master.destroy()
+
+     #---------------------------------------
      # Helper Methods
-     # ---------------------------------------
+     #---------------------------------------
      def _inside_image_area(self, x, y):
           """
           Check if the given (x,y) coordinates fall inside the active image area.
