@@ -895,6 +895,10 @@ class AnnotationTool:
           self.canvas.itemconfig(bbox['rect_id'], outline="blue", width=3)
           self.selected_bbox = bbox
 
+          # If the bounding box does not yet have handles (blue dots), add them.
+          if "handles" not in bbox:
+               self.create_handles(bbox)
+
           # Update the label view: clear any existing selection and set the item corresponding to this bbox.
           target_entry = f"{bbox['label_str']}:{bbox['id']}"
           list_items = self.labeled_listbox.get(0, tk.END)
@@ -921,7 +925,7 @@ class AnnotationTool:
                     # Lower the rectangle below the text item.
                     self.canvas.tag_lower(bg_rect, bbox['text_id'])
                     bbox['text_bg_id'] = bg_rect
-
+          
           # Update the view for new label
           self.update_relationship_view()
           self.update_attribute_view()
@@ -938,6 +942,12 @@ class AnnotationTool:
                self.canvas.delete(bbox['text_bg_id'])
                del bbox['text_bg_id']
 
+          # Remove resize handles if they exist.
+          if 'handles' in bbox:
+               for handle in bbox['handles'].values():
+                    self.canvas.delete(handle)
+               del bbox['handles']
+
           target_entry = f"{bbox['label_str']}:{bbox['id']}"
           list_items = self.labeled_listbox.get(0, tk.END)
           for index, item in enumerate(list_items):
@@ -946,8 +956,7 @@ class AnnotationTool:
                     break
           
           # Click a bbox again will deselect it
-          if self.selected_bbox == bbox:
-               self.selected_bbox = None
+          self.selected_bbox = None
 
           # Update the view for new label
           self.update_relationship_view()
@@ -1145,12 +1154,24 @@ class AnnotationTool:
           dy = event.y - self.last_handle_y
           self.last_handle_x = event.x
           self.last_handle_y = event.y
+          
           # Get which handle (key) is being dragged.
           tags = self.canvas.gettags(self.dragging_handle)
           if len(tags) < 2:
                return
-          handle_key = tags[1]  # e.g., "tl", "tr", etc.
-          x1, y1, x2, y2 = self.pending_bbox['coords']
+          handle_key = tags[1] 
+
+          # Determine which bbox to update: if a pending bbox exists, use it; otherwise use the selected bbox.
+          bbox = None
+          if self.pending_bbox is not None:
+               bbox = self.pending_bbox
+          elif self.selected_bbox is not None:
+               bbox = self.selected_bbox
+          else:
+               return  # nothing to update
+
+          x1, y1, x2, y2 = bbox['coords']
+          
           # Update coordinates based on which handle is dragged.
           if handle_key == "tl":
                x1 += dx
@@ -1174,7 +1195,7 @@ class AnnotationTool:
                x2 += dx
 
           # Enforce a minimum size.
-          min_size = 10
+          min_size = 5
           if x2 - x1 < min_size:
                if handle_key in ["tl", "ml", "bl"]:
                     x1 = x2 - min_size
@@ -1197,10 +1218,11 @@ class AnnotationTool:
                y2 = min(y2, y_max)
 
           # Update the pending bbox coordinates and redraw the rectangle.
-          self.pending_bbox['coords'] = (x1, y1, x2, y2)
-          self.canvas.coords(self.pending_bbox['rect_id'], x1, y1, x2, y2)
+          bbox['coords'] = (x1, y1, x2, y2)
+          # Redraw the rectangle.
+          self.canvas.coords(bbox['rect_id'], x1, y1, x2, y2)
           # Update the handle positions based on the new bbox coordinates.
-          self.update_handles(self.pending_bbox)
+          self.update_handles(bbox)
 
 
      def on_handle_release(self, event):
