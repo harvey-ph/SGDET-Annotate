@@ -1510,20 +1510,35 @@ class AnnotationTool:
                     return
 
                # Remove relationships involving this bbox.
-               self.relationships = [
-                    rel for rel in self.relationships 
-                    if rel[0] != self.selected_bbox and rel[2] != self.selected_bbox
-               ]
+               if hasattr(self, "predicates"):
+                    new_relationships = []
+                    new_predicates = []
+                    # Use zip to iterate over both relationship and its predicate together.
+                    for rel, pred in zip(self.relationships, self.predicates):
+                         if rel[0] != self.selected_bbox and rel[2] != self.selected_bbox:
+                              new_relationships.append(rel)
+                              new_predicates.append(pred)
+                    self.relationships = new_relationships
+                    self.predicates = new_predicates
+               else:
+                    self.relationships = [
+                         rel for rel in self.relationships 
+                         if rel[0] != self.selected_bbox and rel[2] != self.selected_bbox
+                    ]
+               # self.relationships = [
+               #      rel for rel in self.relationships 
+               #      if rel[0] != self.selected_bbox and rel[2] != self.selected_bbox
+               # ]
 
                # If using a predicates list, update it accordingly:
-               if hasattr(self, "predicates"):
-                    # Create new lists that only keep predicates corresponding to remaining relationships.
-                    new_predicates = []
-                    for idx, rel in enumerate(self.relationships):
-                         # (Assuming self.predicates is aligned with self.relationships by index.)
-                         new_predicates.append(self.predicates[idx])
+               # if hasattr(self, "predicates"):
+               #      # Create new lists that only keep predicates corresponding to remaining relationships.
+               #      new_predicates = []
+               #      for idx, rel in enumerate(self.relationships):
+               #           # (Assuming self.predicates is aligned with self.relationships by index.)
+               #           new_predicates.append(self.predicates[idx])
 
-                    self.predicates = new_predicates
+               #      self.predicates = new_predicates
 
                # Delete the rectangle and associated text from the canvas.
                self.canvas.delete(self.selected_bbox['rect_id'])
