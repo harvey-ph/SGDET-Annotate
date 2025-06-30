@@ -1,0 +1,6 @@
+book
+bottle
+box
+cube
+human
+remote
